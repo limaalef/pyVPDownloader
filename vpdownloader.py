@@ -4,6 +4,7 @@ Versão Python baseada no Vivo Play Downloader
 """
 
 import os
+import re
 import sys
 import json
 import base64
@@ -27,7 +28,7 @@ import keyring
 SYSTEM = platform.system()
 TERMINAL_SIZE = shutil.get_terminal_size().columns
 TITULO = "Vivo Play Downloader"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 # Para navegação por teclado
 if SYSTEM == "Windows":
@@ -331,7 +332,7 @@ class Config:
         """Carrega configurações"""
         default_config = {
             "download_path": str(Path.home() / "Downloads"),
-            "output_format": "mp4",
+            "output_format": "ts",
             "show_command": True,
             "auto_decrypt": True,
             "delete_temp": True,
@@ -671,9 +672,13 @@ class Downloader:
         else:
             params = "?direct=1"
 
+        pattern = r"^[a-z]{2}-[a-z0-9]+$"
+        if not re.match(pattern, channel):
+            channel = f"vp-{channel}"
+
         headers = {
             "Authorization": f"Basic {auth_b64}",
-            "X-Channel": f"vp-{channel}",
+            "X-Channel": channel,
             "X-Original-URI": params,
         }
 
@@ -694,7 +699,6 @@ class Downloader:
                     url = url.replace("index.mpd/Manifest.mpd", "index.mpd/Manifest")
 
                 # Imprime chave e URL
-                TERMINAL_SIZE = shutil.get_terminal_size().columns
                 Colors.center_title("Dados da API")
 
                 # Separa múltiplas chaves se houver
@@ -726,7 +730,7 @@ class Downloader:
         url: str,
         key: str,
         channel: str,
-        output_format: str = "mp4",
+        output_format: str = "ts",
         start_time: str = None,
     ):
         """Realiza o download usando N_m3u8DL-RE"""
@@ -764,10 +768,12 @@ class Downloader:
             f"--save-name {filename}",
             f'--save-dir "{output_path}"',
             f'--tmp-dir "{output_path}"',
+            "--concurrent-download"
         ]
 
         if key:
-            cmd.append(f"--key {key}")
+            joined_keys = " --key ".join([key])
+            cmd.append(f"--key {joined_keys}")
 
         if self.config.settings.get("delete_temp", True):
             cmd.append("--del-after-done")
@@ -788,7 +794,7 @@ class Downloader:
             if process.returncode == 0:
                 print(Colors.BG_COLOR)
                 Colors.ok("✓ Download concluído!")
-                Colors.info(f"{output_path / filename}", "Salvo em")
+                Colors.info(f"{output_path / filename}"+f".{output_format}", "Salvo em")
                 logging.info(f"Download concluído: {filename}")
                 return True
             else:
@@ -894,6 +900,7 @@ def show_channel_menu(config: Config) -> Optional[str]:
             f"Insira o número da opção ou use as setas ↑↓←→ para navegar e Enter para selecionar",
             Colors.UNHIGHLIGHTED_COLOR,
         )
+        Colors.item()
 
     draw_menu()
     number_buffer = ""
@@ -955,7 +962,7 @@ def select_datetime(prompt: str, default_now: bool = True) -> str:
     kb = KeyboardHandler()
 
     now = datetime.now()
-    min_date = now - timedelta(days=7)
+    min_date = now - timedelta(days=8)
     selected_date = now if default_now else now
 
     fields = [
@@ -1119,7 +1126,7 @@ def show_settings_menu(config: Config):
         settings["download_path"] = new_path
         config.save_config(settings)
     elif choice == "2":
-        fmt = input(f"{Colors.select_item("Formato (mp4/ts)", "mp4")}") or "mp4"
+        fmt = input(f"{Colors.select_item("Formato (mp4/ts)", "ts")}") or "ts"
         if fmt in ["mp4", "ts"]:
             settings["output_format"] = fmt
             config.save_config(settings)
@@ -1164,8 +1171,15 @@ def main():
     parser.add_argument("channel", nargs="?", help="Nome do canal ou URL")
     parser.add_argument("--start", help="Data/hora início (YYYYMMDDHHMMSS)")
     parser.add_argument("--end", help="Data/hora fim (YYYYMMDDHHMMSS)")
-    parser.add_argument("--format", choices=["mp4", "ts"], default="mp4")
-    parser.add_argument("--key", help="Chave de descriptografia")
+    parser.add_argument("--format", choices=["mp4", "ts"], default="ts")
+    parser.add_argument(
+        "-k",
+        "--key",
+        type=str,
+        nargs="+",
+        dest="key",
+        help="Chave de descriptografia",
+    )
 
     args = parser.parse_args()
 
@@ -1175,10 +1189,12 @@ def main():
     # Modo linha de comando
     if args.channel:
         Colors.print_banner()
-        print(f"{Colors.BG_COLOR}")
         if args.channel.startswith("http"):
             url = args.channel
-            key = args.key or input(f"{Colors.select_item("Chave de descriptografia")}")
+            if "aiv-cdn.net/iad-nitro/jab-assets" in url:
+                key = "6e37fc06a2c4347e9168d3c8616244bd:350bca1ea2e5a335799a886333738839"
+            else:
+                key = args.key or input(f"{Colors.select_item("Chave de descriptografia")}")
             channel_name = "manual"
         else:
             mode = "dvr" if args.start and args.end else "live"
@@ -1186,7 +1202,7 @@ def main():
             channel_name = args.channel
 
         if url:
-            fmt = config.settings.get("output_format", "mp4")
+            fmt = config.settings.get("output_format", "ts")
             downloader.download_video(url, key, channel_name, fmt, args.start)
     else:
         # Modo interativo
