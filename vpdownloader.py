@@ -1192,7 +1192,7 @@ def main():
         if args.channel.startswith("http"):
             url = args.channel
             if "aiv-cdn.net/iad-nitro/jab-assets" in url:
-                key = "6e37fc06a2c4347e9168d3c8616244bd:350bca1ea2e5a335799a886333738839"
+                key = "d59c68c9d5159c6f794491790d1f0419:ae7f422f97c5ae22a538551ba2ff97db" #"6e37fc06a2c4347e9168d3c8616244bd:350bca1ea2e5a335799a886333738839"
             else:
                 key = args.key or input(f"{Colors.select_item("Chave de descriptografia")}")
             channel_name = "manual"
